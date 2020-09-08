@@ -1,0 +1,328 @@
+---
+title: "Building Counterfactual Models"
+output: 
+  html_document: 
+    fig_height: 6
+    fig_width: 9
+    toc: yes
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, error=FALSE)
+library(here)
+source(here("check_packages.R"))
+source(here("useful_functions.R"))
+load(here("output","models.RData"))
+load(here("output","real_unions.RData"))
+load(here("output","dissimilarity_indices.RData"))
+load(here("output","real_unions.RData"))
+load(here("output","potential_partners.RData"))
+load(here("output","potential_swingers.RData"))
+```
+
+```{r model-names, include=FALSE}
+# change the coefficent names for the models
+better_names <- c("Husband's age - wife's age", "Square of husband's age - wife's age",
+                  "Black/White","American Indian/White","Asian/White","Latino/White",
+                  "Black/American Indian","Black/Asian","Black/Latino",
+                  "Asian/American Indian","Latino/American Indian","Asian/Latino",
+                  "Educational crossing, LHS to HS", "Educational crossing, HS to SC", "Educational crossing, SC to C",
+                  "Female educational hypergamy", "Female educational hypogamy",
+                  "Husband immigrant/wife native","Wife immigrant/husband native",
+                  "Birthplace endogamy", "Language endogamy")
+
+names(better_names) <- rownames(model_immigration$coefficients)
+rownames(model_base$coefficients) <- better_names[rownames(model_base$coefficients)]
+rownames(model_educ$coefficients) <- better_names[rownames(model_educ$coefficients)]
+rownames(model_immigration$coefficients) <- better_names[rownames(model_immigration$coefficients)]
+rownames(model_state$coefficients) <- better_names[rownames(model_state$coefficients)]
+rownames(model_state_educ$coefficients) <- better_names[rownames(model_state_educ$coefficients)]
+rownames(model_country$coefficients) <- better_names[rownames(model_country$coefficients)]
+rownames(model_country_educ$coefficients) <- better_names[rownames(model_country_educ$coefficients)]
+rownames(model_swinger$coefficients) <- better_names[rownames(model_swinger$coefficients)]
+rownames(model_swinger_country$coefficients) <- better_names[rownames(model_swinger_country$coefficients)]
+rownames(model_swinger_country_noweight$coefficients) <- better_names[rownames(model_swinger_country_noweight$coefficients)]
+```
+
+
+
+## Introduction
+<a href="#top">Back to top</a>
+
+In this analysis, I will compare models estimating racial exogamy and educational heterogamy using the new counterfactual conditional logit approach with a variety of different variables and marriage market definitions. I will also compare the results of these models to a more traditional log-linear model. 
+
+All analysis is limited to respondents who lived in identifiable metropolitan areas from the IPUMS data. For most of the analysis, the metro area is the marriage market from which alternate partners are sampled. However, as a sensitivity analysis I will also explore the case where I make the state or the entire country the marriage market.
+
+I will also explore two different ways of defining the relevant population of alternate partners:
+
+1. The "swinger" model. In this case, I only include individuals who were married to other respondents in the pool of alternate spouses. This implicitly is the comparison being made in log-linear models and so should more closely mirror those results, but is in general a bad approach.
+2. The full sample of all individuals who were married to other respondents or single for the time period in question. 
+
+The models themselves include four sets of thematic variables:
+
+1. Age. I include the difference in age between potential partners (husband's age minus wife's age) and its square to account for age preferences. Generally people marry individuals close in age, but there still exists a slight joint preference for older husbands and younger wives. This can be modeled with a parabola by including the squared term. 
+2. Race. I include a set of gender-symmetric dummy variables for each possible interracial union (e.g. black-white, black-Latino, Asian-Latino). These can be split into gender specific terms, but the goal here is to get the average level of exogamy across both gender combinations.
+3. Education. I use the standard "crossing" model with thresholds at less than high school/high school, high school/some college, and some college/college. I also include dummy variables for whether the pairing would result in female educational hypergamy (marrying up) or female educational hypogamy (marrying down).
+4. Immigration related. I include a dummy for birthplace endogamy and a dummy for language endogamy. Language endogamy is not perfectly measured because its possible that the language spoken at home shifted for one spouse as a result of the union, rather than the other way around. I also include two gender-specific dummies for immigrant wife/native husband and native wife/immigrant husband that measures tendencies for native/immigrant exogamy irrespective of specific birthplace.
+
+One important goal is to see how racial exogamy parameters are affected by immigration related variables, and to a lesser extent educational differences. So I build up from a baseline model that just includes age and race parameters to a full model at the metro level.
+
+# Sample size
+
+```{r actual-n, echo=FALSE, fig.height=25}
+temp <- as.data.frame.table(table(actual$met_name))
+colnames(temp) <- c("met_name", "count")
+ggplot(temp, aes(x=reorder(met_name, count, mean), y=count))+
+  geom_hline(yintercept = 50, linetype=2, color="red")+
+  geom_lollipop()+
+  scale_y_log10()+
+  coord_flip()+
+  theme_bw()+
+  theme(axis.text.y = element_text(size=6))+
+  labs(x=NULL, y="number of actual couples (log-scale)")
+```
+
+
+# Choice set size
+
+One question is how many alternate partners need to be sampled to get fairly stable estimates of the parameters across different samples? To explore this, I test samples in which I drew 3, 5, 10, 50, and 100 alternate spouses for each actual union. I repeat each sample of a given size ten times. I then run models equivalent to model 2 below on each of these samples. After running models on each of these samples, I look at the variation in coefficients between samples relative to the variation within sample. 
+
+```{r sample-size-calc, include=FALSE}
+load(here("output","parameters_samplesize.RData"))
+
+calculate_vars <- function(coef, se) {
+  within_var <- apply(se^2, 1, mean)
+  between_var <- apply(coef, 1, var)
+  return(data.frame(within_var, between_var))
+}
+
+var_compare <- cbind(calculate_vars(coef.size3, se.size3), size=3)
+var_compare <- rbind(var_compare,
+                     cbind(calculate_vars(coef.size5, se.size5), size=5))
+var_compare <- rbind(var_compare,
+                     cbind(calculate_vars(coef.size10, se.size10), size=10))
+var_compare <- rbind(var_compare,
+                     cbind(calculate_vars(coef.size20, se.size20), size=20))
+var_compare <- rbind(var_compare,
+                     cbind(calculate_vars(coef.size50, se.size50), size=50))
+
+var_compare$ratio <- var_compare$between_var/var_compare$within_var
+
+var_compare$variable <- factor(rep(c("Husband's age - wife's age", 
+                                     "Square of husband's age - wife's age",
+                                     "Black/White",
+                                     "American Indian/White","Asian/White",
+                                     "Latino/White","Black/American Indian",
+                                     "Black/Asian","Black/Latino",
+                                     "Asian/American Indian",
+                                     "Latino/American Indian","Asian/Latino",
+                                     "Educational crossing, LHS to HS", 
+                                     "Educational crossing, HS to SC", 
+                                     "Educational crossing, SC to C",
+                                     "Female educational hypergamy", 
+                                     "Female educational hypogamy"),
+                                   5))
+
+```
+
+```{r sample-size-boxplots, echo=FALSE}
+ggplot(var_compare, aes(x=factor(size), y=ratio))+
+  geom_boxplot(fill="grey70")+
+  scale_y_continuous(limits=c(0,2))+
+  labs(x="number of alternate partners sampled", y="ratio of between to within sample variance")+
+  theme_bw()
+```
+
+The boxplots look at the ratio of between to within sample variation across all 15 coefficient estimates from the models for each of the 10 samples (so 150 values altogether). We can see that the between sample variation is quite substantial in teh samples of size 3. For the median paramter, its about 60% of the within-sample variation. This diminishes substantially for samples of 5 and 10 although we still see that the medians are above 25%. In both cases, the variance in this ratio across coefficients got much smaller as well.
+
+To get a more detailed look at this, we can look at the change in this ratio specific to each variable across th different sample sizes.
+
+```{r}
+ggplot(var_compare, aes(x=size, y=ratio, group=variable, color=variable))+
+  geom_point()+
+  geom_line()+
+  labs(x="number of alternate partners sampled", y="ratio of between to within sample variance")+
+  theme_bw()
+```
+
+## Models with controls
+<a href="#top">Back to top</a>
+
+I start with the full metro-level analysis. I fit the following nested models:
+
+1. a baseline model that controls for spousal age differences (and their square) in addition to gender-symmetric racial exogamy terms.
+2. a model that adds in education effects using an educational crossing model and dummies for female hypergamy and hypogamy - educational homogamy is the reference
+3. a model that adds in immigration related parameters:
+  1. a general parameter for immigrant/native exogamy
+  2. a place of birth endogamy term
+  3. a language endogamy term
+
+```{r nested-table, echo=FALSE, results='asis'}
+knitreg(lapply(list(model_base, model_educ, model_immigration), convertModel), 
+          digits = 3, 
+          caption="Models predicting racial exogamy with controls for educational assortative mating, age differences, and birthplace/language endogamy",
+        
+          caption.above=TRUE)
+```
+
+Lets start by talking about the age effects which are pretty consistent across models here.Its a parabola, so we can calculate the age difference here were the likelihood of marriage is maximized (or minimized, technically). Thats simply given by:
+
+$$\beta_1/(-2*\beta_2))$$
+
+Where $\beta_1$ is the linear age difference term and $\beta_2$ is the squared age difference term. If we take -0.013 from the third model as $\beta_2$ we get:
+
+$$0.072/(-2*-0.013)=2.76$$
+
+So, the model suggests that the likelihood of a marriage is highest when the husband is 2.76 years older than the wife. So there is still a slight joint preference for husbands to be older, but not by much. Here is a graph of the full odds ratio of a union based on the age differences, where the baseline odds of one are for a union with no age difference.
+
+```{r age-preference-graph, echo=FALSE}
+agediff <- seq(from=-20, to=20, by=0.1)
+odds <- exp(model_immigration$coefficients$b.pool[1]*agediff+model_immigration$coefficients$b.pool[2]*(agediff^2))
+ggplot(data.frame(agediff, odds), aes(x=agediff, y=odds))+
+  geom_line()+
+  theme_bw()+
+  scale_y_continuous(breaks = c(0,0.25,0.5,0.75,1,1.25))+
+  geom_vline(xintercept = model_immigration$coefficients$b.pool[1]/(-2*model_immigration$coefficients$b.pool[2]),
+             linetype=2)+
+  labs(x="husband's age - wife's age", y="odds of union relative to odds for partners of the same age")
+```
+
+The odds dip towards zero fairly quickly here on both sides. 
+
+Now lets look at how controls for education and immigration factors affect our measures of racial exogamy
+
+```{r nested-graph, echo=FALSE}
+temp <- rbind(data.frame(variable=rownames(model_base$coefficients), 
+                         coef=model_base$coefficients$b.pool,
+                         controls="age"),
+              data.frame(variable=rownames(model_educ$coefficients), 
+                         coef=model_educ$coefficients$b.pool,
+                         controls="age+education"),
+              data.frame(variable=rownames(model_immigration$coefficients), 
+                         coef=model_immigration$coefficients$b.pool,
+                         controls="age+education+immigration"))
+rexog_terms <- c("Black/White","American Indian/White","Asian/White","Latino/White",
+                 "Black/American Indian","Black/Asian","Black/Latino",
+                 "Asian/American Indian","Latino/American Indian","Asian/Latino")
+educ_terms <- c("Educational crossing, LHS to HS", "Educational crossing, HS to SC", "Educational crossing, SC to C",
+                "Female educational hypergamy", "Female educational hypogamy")
+immig_terms <- c("Husband immigrant/wife native","Wife immigrant/husband native",
+                 "Birthplace endogamy", "Language endogamy")
+temp <- subset(temp, variable %in% rexog_terms)
+ggplot(temp, aes(x=reorder(variable, coef, max), y=exp(coef), color=controls))+
+  geom_point()+
+  scale_color_viridis_d(end=0.75)+
+  coord_flip()+
+  labs(x=NULL, y="odds relative to racial endogamy")+
+  theme_bw()+
+  theme(legend.position = "bottom")
+```
+
+Several things worth nothing in this figure:
+
+1. Controlling for education and immigration effects, increases exogamy for every single group consistently but the size of this increase varies dramatically.
+2. The effect of controlling for education on parameter estimates is generally modest. 
+3. The effect of controlling for immigration factors is very large for every pairing involving Latinos and Asians. This is sensible because these groups contain the largest number of foreign-born individuals and individuals who speak a non-English language at home (SHOW THIS). In some cases, once we account for language and birthplace endogamy, the rates of intermarriage for asians and latinos double.
+4. All four black pairings are the least likely kinds of intermarriage suggesting that black/non-black is the strongest boundary here. It should be noted though that black/latino and black/American Indian are more common than black/white and black/asian.
+5. Latino/White intermarriage is by far the most likely intermarriage pairing after accounting for immigration related issues. Asian/White pairings are also much more likely after this comparison, suggesting again that black/non-black is a more important boundary than white/non-white.
+
+I can also look at the relative change in the effect for the racial exogamy terms:
+
+```{r ratio, echo=FALSE}
+temp <- data.frame(variable=rownames(model_educ$coefficients), 
+                   ratio=exp(model_immigration$coefficients$b.pool[1:nrow(model_educ$coefficients)]-
+                               model_educ$coefficients$b.pool))
+temp <- subset(temp, variable %in% rexog_terms)
+
+ggplot(temp, aes(x=reorder(variable, ratio, max), y=ratio))+
+  geom_point()+
+  scale_color_viridis_d(end=0.75)+
+  coord_flip()+
+  labs(x=NULL, y="ratio of odds from education model to model with education and immigration")+
+  theme_bw()+
+  theme(legend.position = "bottom")
+```
+
+I generally don't like this latter graph as much, although it does a much better job of showing the breakup into three groups: "old race" combination, "new race/old race" combination, "new race" combination.
+
+## Testing bias
+
+I test bias resulting from (a) using only already married partners as alternate partners, eg the swinger biaas; and (b) using the entire country as the marriage market rather than the metropolitan area.
+
+In both cases, I run models identical to Model 3 from the table above. I compare the results for the main racial exogamy effects and the educational crossing terms. 
+
+### Swingers vs. all alternative patners
+
+How much do our results change if we move from a model that pulls alternate partners from currently married partners and singles to one that just pulls currently married partners? Such a model would be more consistent with a log-linear model approach.  
+
+```{r coefs_compare, echo=FALSE}
+coefs <- data.frame(variable=better_names[3:17],
+                    model_full=model_immigration$coefficients[3:17,"b.pool"],
+                    model_swinger=model_swinger$coefficients[3:17,"b.pool"],
+                    model_country=model_country$coefficients[3:17, "b.pool"],
+                    model_state=model_state$coefficients[3:17, "b.pool"])
+#add in dissimilarity vaalues
+coefs$D <- c(d_race$D, d_crossing$D, NA, NA)
+```
+
+```{r compare-swinger, echo=FALSE}
+ggplot(coefs, aes(x=exp(model_swinger), y=exp(model_full)))+
+  geom_point()+
+  geom_abline(slope=1, color="blue", linetype=2)+
+  geom_label_repel(aes(label=variable), size=2)+
+  scale_x_log10(limits=c(0.03,1.3))+scale_y_log10(limits=c(0.03,1.3))+
+  labs(x="odds ratios from counterfactual model with marriage market\ndefined by currently married spouses only", 
+       y="odds ratios from counterfactual model with marriage\nmarket defined by currently married spouses and singles")+
+  theme_bw()
+```
+
+Points below the dotted line here indicate lower estimates of exogamy/heterogamy in the full model than in the swinger model, and vice versa for points above the line. The results here show that the general pattern is for the swinger model to inflate estimates of exogamy/heterogamy, although this pattern is stronger for racial exogamy, than educational heterogamy.
+
+### Shifting marriage market definition
+
+To look at the effect of the marriage market definition, I run an alternate model in which all partners are drawn from a single national marriage market rather than metropolitan-area specific marriage markets. 
+
+```{r compare-market, echo=FALSE}
+ggplot(coefs, aes(x=exp(model_country), y=exp(model_full)))+
+  geom_point()+
+  geom_abline(slope=1, color="blue", linetype=2)+
+  geom_label_repel(aes(label=variable), size=2)+
+  scale_x_log10(limits=c(0.03,1.2))+scale_y_log10(limits=c(0.03,1.2))+
+  labs(y="odds ratios from counterfactual model with marriage market\ndefined by all eligibles at metro level", 
+       x="odds ratios from counterfactual model with marriage market\ndefined by all eligibles at country level")+
+  theme_bw()
+```
+
+In contrast to the swingers model, the model with a national marriage market tends to underestimate exogamy for racial groups. This bias is largest when the marriage involves Latinos, Asians, and American Indian populations who are less evenly distributed throughout the country. The national definition of a marriage market has virtually no effect on the educational parameters.
+
+Lets take a look at how these differences in the exogamy/heterogamy odds ratio are related to the dissimilarity of the groups across metro areas in the US. We do this by calculating the dissimilarity index for each interracial pair and educational crossing. Then we plot them.
+
+```{r dissimilarity-plot, echo=FALSE}
+ggplot(coefs, aes(x=D*100, y=exp(model_full-model_country)))+
+  geom_point()+
+  geom_smooth(se=FALSE, method="gam")+
+  geom_text_repel(aes(label=variable))+
+  labs(x="Index of dissimilarity between relevant groups",
+       y="Ratio of change in odds ratio")+
+  theme_bw()
+```
+
+
+How well does a model with the state as the marriage market do? 
+
+```{r compare-market-state, echo=FALSE}
+ggplot(coefs, aes(x=exp(model_state), y=exp(model_full)))+
+  geom_point()+
+  geom_abline(slope=1, color="blue", linetype=2)+
+  geom_label_repel(aes(label=variable), size=2, force=10)+
+  scale_x_log10(limits=c(0.03,1.2))+scale_y_log10(limits=c(0.03,1.2))+
+  labs(y="odds ratios from counterfactual model with marriage market\ndefined by all eligibles at state level", 
+       x="odds ratios from counterfactual model with marriage market\ndefined by all eligibles at country level")+
+  theme_bw()
+```
+
+The state model does much better. The only cases where we see disagreement is for part-American Indian intermarriage parameters. I don't know how much this tell us though. Many states are dominated by a single metro area and so that may be driving this. Its less clear how close this would be if we included non-metro residents at the state level, but almost certainly this would deflate exogamy rates as rural and urban populations tend to be different.
+
+
+
