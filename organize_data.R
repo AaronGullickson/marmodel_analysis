@@ -37,19 +37,19 @@ census <- rbind(
   #                                        col_names = var_names),
   #          col_types = cols(.default = "i"), #ensure that all variables are read in as integers
   #          progress = FALSE),
-  read_fwf(here("analysis","input", "usa_00080.dat.gz"), 
+  read_fwf(here("input", "usa_00080.dat.gz"), 
            col_positions = fwf_positions(start = start_idx,
                                          end   = end_idx,
                                          col_names = var_names),
            col_types = cols(.default = "i"), 
            progress = FALSE),
-  read_fwf(here("analysis","input", "usa_00081.dat.gz"), 
+  read_fwf(here("input", "usa_00081.dat.gz"), 
            col_positions = fwf_positions(start = start_idx,
                                          end   = end_idx,
                                          col_names = var_names),
            col_types = cols(.default = "i"), 
            progress = FALSE),
-  read_fwf(here("analysis","input", "usa_00082.dat.gz"), 
+  read_fwf(here("input", "usa_00082.dat.gz"), 
            col_positions = fwf_positions(start = start_idx,
                                          end   = end_idx,
                                          col_names = var_names),
@@ -138,7 +138,7 @@ census$met2013 <- factor(as.character(census$met2013))
 
 #attach metro names to id variable
 #read metro names directly from the codebook
-met_names <- read_fwf(here("analysis","input","usa_00078_cbk.txt"),
+met_names <- read_fwf(here("input","usa_00078_cbk.txt"),
                       skip=962, n_max=294,
                       col_positions = fwf_positions(start = c(1,6),
                                                     end   = c(5,100),
@@ -210,9 +210,9 @@ actual$met2013 <- droplevels(actual$met2013)
 #garbage cleanup
 rm(married_men, married_women)
 
-save(actual, file=here("analysis","output","real_unions.RData"))
-save(men, women, file=here("analysis","output","potential_partners.RData"))
-save(men.swinger, women.swinger, file=here("analysis","output",
+save(actual, file=here("output","real_unions.RData"))
+save(men, women, file=here("output","potential_partners.RData"))
+save(men.swinger, women.swinger, file=here("output",
                                            "potential_swingers.RData"))
 
 
@@ -257,4 +257,4 @@ d_crossing <- data.frame(crossing=c("LHS/HS","HS/SC","SC/C"),
                          D=c(d_lhs, d_hs, d_sc))
 
 save(d_race, d_crossing, 
-     file=here("analysis","output","dissimilarity_indices.RData"))
+     file=here("output","dissimilarity_indices.RData"))
