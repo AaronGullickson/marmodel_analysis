@@ -14,3 +14,10 @@ package.check <- lapply(packages, FUN = function(x) {
     library(x, character.only = TRUE)
   }
 })
+
+#install fakeunion from GitHub
+library(devtools)
+if(!require(fakeunion)) {
+  install_github("AaronGullickson/fakeunion")
+  library(fakeunion)
+}
