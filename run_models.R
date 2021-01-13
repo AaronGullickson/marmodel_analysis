@@ -116,7 +116,7 @@ cat("\nsaving output")
 
 save(model_base, model_educ, model_immigration, model_state, model_country, model_swinger, 
      model_swinger_country, model_swinger_country_noweight, model_country_educ, model_state_educ,
-     file=here("analysis","output","models.RData"))
+     file=here("output","models.RData"))
 
 cat("done")
 

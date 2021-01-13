@@ -191,6 +191,6 @@ rm(models.size50.4)
 
 save(coef.size3, coef.size5, coef.size10, coef.size20, coef.size50,
      se.size3, se.size5, se.size10, se.size20, se.size50, 
-     file=here("analysis","output","parameters_samplesize.RData"))
+     file=here("output","parameters_samplesize.RData"))
 
 Sys.time()
