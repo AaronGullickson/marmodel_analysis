@@ -2,7 +2,7 @@
 
 Aaron Gullickson
 
-The files contained in this repository will reproduce the full analysis for the paper "A Counterfactual Choice Approach to the Study of Partner Selection" published in *Demographic Research*. 
+The files contained in this repository will reproduce the full analysis for the paper "A Counterfactual Choice Approach to the Study of Partner Selection."
 
 The entire analysis is conducted in *R* version 3.6.2. Required packages for the analysis will be installed by running the `check_packages.R` script which is run by default in all of the other scripts. 
 
